@@ -1,13 +1,11 @@
 #include <IRremote.h>
 
 /*
-This is a simplified version of https://github.com/tuxedo0801/Arduino-Hob2Hood
+This is based on https://github.com/tuxedo0801/Arduino-Hob2Hood
 This version controls a central ventilation hood without a fan, and instead controls a motor to open or close the ventilation for a central ventilation hood.
-Thus, the difference is that all "speed steps 1 to 4 below equals ventilation open.
 Please note that Electrolux and AEG hobs and hoods use the same IR protocol since it's actually Electrolux making both brands.
 This project controls a modified Franke Tender hood using an old Arduino Uno with an 1838 IR receiver and an Electrolux HOB750MF induction hob with Hob2Hood IR transmitter.
 
-Reference original project (in german): http://knx-user-forum.de/forum/%C3%B6ffentlicher-bereich/knx-eib-forum/diy-do-it-yourself/37790-hob2hood-ir-protokoll-arduino/page2
 Ventilation Step1 0xE3C01BE2
 Ventilation Step2 0xD051C301
 Ventilation Step3 0xC22FFFD7
@@ -22,47 +20,64 @@ const long IRCMD_VENT_1 = 0xE3C01BE2;
 const long IRCMD_VENT_2 = 0xD051C301;
 const long IRCMD_VENT_3 = 0xC22FFFD7;
 const long IRCMD_VENT_4 = 0xB9121B29;
-
 const long IRCMD_VENT_OFF = 0x55303A3;
+
+// IR commands from a remote, just for testing
+const long IRCMD_TEST_ON = 0x80A;
+const long IRCMD_TEST_OFF = 0x800;
+
 const long IRCMD_LIGHT_ON = 0xE208293C;
 const long IRCMD_LIGHT_OFF = 0x24ACF947;
 
 // Pins for input switches/controls for manual control of the hood
-const int PIN_IN_VENT = A0;
-const int PIN_IN_LIGHT = A4;
-
-// Pins for the output which controls a relay for the ventilation motor
-const int PIN_OUT_VENT = 2;
-
-const int PIN_OUT_LIGHT = 6;
+const int PIN_IN_VENT = 8; //A0;
+const int PIN_IN_LIGHT = 9; //A4;
 
 // IR Receiver PIN
 const int PIN_IR_RECEIVER = 11;
 
+// Pins for the output which controls a relay for the ventilation motor
+const int PIN_OUT_VENT = 2;
+const int PIN_OUT_LIGHT = 4; 
+
+const int PIN_OUT_LED = 13; 
+
 const int MODE_HOB2HOOD = 0;
 const int MODE_MANUAL = 1;
 
-// ventilation, light and mode status
-int ventilation = 0;
-int last_ventilation = 0;
-int light = 0;
-int last_light = 0;
+// ventilation, light and mode states
+int inVent = LOW; //0
+int vent = LOW; 
+int last_vent = LOW;
+
+int inLight = LOW;
+int light = LOW;
+int last_light = LOW;
+
 int mode = 0; // 0 = hob2hood control, 1 = manual control
+
+
+// the following variables are unsigned longs because the time, measured in
+// milliseconds, will quickly become a bigger number than can be stored in an int.
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
 IRrecv irrecv(PIN_IR_RECEIVER); // create instance of 'irrecv'
 decode_results results;
 
-#define OFF HIGH
-#define ON LOW
-
 void setup() {
 
   // Init
+
+  pinMode(PIN_IN_VENT, INPUT);
+  pinMode(PIN_IN_LIGHT, INPUT);
+  pinMode(PIN_IR_RECEIVER, INPUT);
+  
   pinMode(PIN_OUT_VENT, OUTPUT);
-  digitalWrite(PIN_OUT_VENT, OFF);
+  digitalWrite(PIN_OUT_VENT, LOW);
 
   pinMode(PIN_OUT_LIGHT, OUTPUT);
-  digitalWrite(PIN_OUT_LIGHT, OFF);
+  digitalWrite(PIN_OUT_LIGHT, LOW);
 
   Serial.begin(9600); // for serial monitor output
   Serial.println("Hob2Hood Starting ...");
@@ -75,12 +90,13 @@ void setup() {
 void loop() {
 
   // read manual control inputs
-  int inLight = analogRead(PIN_IN_LIGHT);
-  int inVentilation = analogRead(PIN_IN_VENT);
+  
+  inVent = digitalRead(PIN_IN_VENT);
+  inLight = digitalRead(PIN_IN_LIGHT);
 
-  // if any of the manual control inputs is IN USE (analog value >512) --> manual mode
-  if (inLight >= 512 ||
-      inVentilation >= 512 ) { // borde vända på >= till <= och sänka värdet om det är 3,2V till -1,9V...
+  // if any of the manual control inputs is IN USE --> manual mode
+  if (inLight == HIGH ||
+      inVent == HIGH ) {
 
     if (mode == MODE_HOB2HOOD) {
       Serial.println("Switching to manual mode");
@@ -88,40 +104,26 @@ void loop() {
 
     mode = MODE_MANUAL;
 
-    if (inLight > 512) {
-      // Switch on the light:
-      last_light = light;
-      light = 1;
-    } else {
-      // Switch off the light:
-      last_light = light;
-      light = 0;
-    }
+    Serial.println("inLight: " + inLight );
+    Serial.println(" inVent: " + inVent);
 
-    if (inVentilation1 > 512) {
-      // set ventilation speed 1
-      // set ventilation open
-      last_ventilation = ventilation;
-      ventilation = 1;
-    } else if (inVentilation2 > 512) {
-      // set ventilation speed 2
-      // set ventilation open
-      last_ventilation = ventilation;
-      ventilation = 2;
-    } else if (inVentilation3 > 512) {
-      // set ventilation speed 3
-      // set ventilation open
-      last_ventilation = ventilation;
-      ventilation = 3;
-    } else if (inVentilation4 > 512) {
-      // set ventilation speed 4
-      // set ventilation open
-      last_ventilation = ventilation;
-      ventilation = 4;
-    } else {
-      // set ventilation off
-      last_ventilation = ventilation;
-      ventilation = 0;
+
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+      Serial.println("---About time!---");
+        
+        if (inLight != last_light) {
+          // Switch on the light:
+          lastDebounceTime = millis();
+          last_light = light;
+          //light = !light;
+        }
+    
+        if (inVent != last_vent) {
+        lastDebounceTime = millis();
+          last_vent = vent;
+          //vent = !vent;
+        }
+    
     }
 
     controlHood();
@@ -129,14 +131,15 @@ void loop() {
   } else {
 
     // now we are in HOB2HOOD-mode, because no manual control is in use
+    // This doesn't work does it. As soon as button is released...
 
     // check for previous mode
     if (mode == MODE_MANUAL) {
       Serial.println("Switching to Hob2Hood mode");
-      // set to initial state
-      ventilation = 0;
-      light = 0;
-      controlHood();
+      // Well, we can't just set to initial state
+       vent = 0;
+       light = 0;
+       controlHood();
 
       // and switch to hob2hood mode
       mode = MODE_HOB2HOOD;
@@ -159,34 +162,43 @@ void receiveIRCommand() {
     switch (results.value) {
 
       case IRCMD_LIGHT_ON:
-        light = 1;
+        light = HIGH;
         break;
 
       case IRCMD_LIGHT_OFF:
-        light = 0;
+        light = LOW;
         break;
 
       case IRCMD_VENT_1:
-        ventilation = 1;
+        vent = HIGH;
         break;
 
       case IRCMD_VENT_2:
-        ventilation = 2;
+        vent = HIGH;
         break;
 
       case IRCMD_VENT_3:
-        ventilation = 3;
+        vent = HIGH;
         break;
 
       case IRCMD_VENT_4:
-        ventilation = 4;
+        vent = HIGH;
         break;
 
       case IRCMD_VENT_OFF:
-        ventilation = 0;
+        vent = LOW;
+        break;
+
+      case IRCMD_TEST_ON:
+        light = HIGH;
+        break;
+
+      case IRCMD_TEST_OFF:
+        light = LOW;
         break;
 
       default:
+      Serial.println("Unknown IR command");
         break;
     }
 
@@ -195,25 +207,25 @@ void receiveIRCommand() {
   }
 }
 
-// control hood based on 'light' and 'ventilation' variables
+// control hood based on 'light' and 'vent' variables
 void controlHood() {
 
   bool logLight = light!=last_light;
-  bool logVent = ventilation!=last_ventilation;
+  bool logVent = vent!=last_vent;
   
 
   // control light
   switch (light) {
     // Light OFF
-    case 0:
+    case LOW:
       if (logLight) Serial.println("Light: OFF");
-      digitalWrite(PIN_OUT_LIGHT, OFF);
+      digitalWrite(PIN_OUT_LIGHT, LOW);
       delay(10);
       break;
     // Light ON
-    case 1:
+    case HIGH:
       if (logLight) Serial.println("Light: ON");
-      digitalWrite(PIN_OUT_LIGHT, ON);
+      digitalWrite(PIN_OUT_LIGHT, HIGH);
       delay(10);
       break;
     default:
@@ -221,64 +233,23 @@ void controlHood() {
   }
 
   // control ventilation
-  switch (ventilation) {
+  switch (vent) {
 
     // Ventilation OFF
-    case 0:
+    case LOW:
       if (logVent) Serial.println("Ventilation: OFF");
-      //digitalWrite(PIN_OUT_VENT_1, OFF);
-      //digitalWrite(PIN_OUT_VENT_2, OFF);
-      //digitalWrite(PIN_OUT_VENT_3, OFF);
-      //digitalWrite(PIN_OUT_VENT_4, OFF);
-      digitalWrite(PIN_OUT_VENT, OFF);
+      digitalWrite(PIN_OUT_VENT, LOW);
+      digitalWrite(PIN_OUT_LED, LOW);
       delay(10);
       break;
 
     // Ventilation ON
-    case 1:
+    case HIGH:
       if (logVent) Serial.println("Ventilation: ON");
-      //digitalWrite(PIN_OUT_VENT_2, OFF);
-      //digitalWrite(PIN_OUT_VENT_3, OFF);
-      //digitalWrite(PIN_OUT_VENT_4, OFF);
-      //delay(100);
-      digitalWrite(PIN_OUT_VENT, ON);
+      digitalWrite(PIN_OUT_VENT, HIGH);
+      digitalWrite(PIN_OUT_LED, HIGH);
       delay(10);
-
-      //delay(10);
       break;
-
-//    // Ventilation Speed 2
-//    case 2:
-//      if (logVent) Serial.println("Ventilation: 2");
-//      digitalWrite(PIN_OUT_VENT_1, OFF);
-//      digitalWrite(PIN_OUT_VENT_3, OFF);
-//      digitalWrite(PIN_OUT_VENT_4, OFF);
-//      delay(100);
-//      digitalWrite(PIN_OUT_VENT_2, ON);
-//      delay(10);
-//      break;
-//
-//    // Ventilation Speed 3
-//    case 3:
-//      if (logVent) Serial.println("Ventilation: 3");
-//      digitalWrite(PIN_OUT_VENT_1, OFF);
-//      digitalWrite(PIN_OUT_VENT_2, OFF);
-//      digitalWrite(PIN_OUT_VENT_4, OFF);
-//      delay(100);
-//      digitalWrite(PIN_OUT_VENT_3, ON);
-//      delay(10);
-//      break;
-//
-//    // Ventilation Speed 4
-//    case 4:
-//      if (logVent) Serial.println("Ventilation: 4");
-//      digitalWrite(PIN_OUT_VENT_1, OFF);
-//      digitalWrite(PIN_OUT_VENT_2, OFF);
-//      digitalWrite(PIN_OUT_VENT_3, OFF);
-//      delay(100);
-//      digitalWrite(PIN_OUT_VENT_4, ON);
-//      delay(10);
-//      break;
 
     default:
       break;
@@ -286,6 +257,6 @@ void controlHood() {
   }
   
   last_light = light;
-  last_ventilation = ventilation;
+  last_vent = vent;
   
 }
