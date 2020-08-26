@@ -46,13 +46,18 @@ const int MODE_HOB2HOOD = 0;
 const int MODE_MANUAL = 1;
 
 // ventilation, light and mode states
-int inVent = LOW; //0
-int vent = LOW; 
-int last_vent = LOW;
+int ventButtonInput = LOW; //0
+int ventButtonState = LOW;
+int ventButtonPrevious = LOW;  
 
-int inLight = LOW;
-int light = LOW;
-int last_light = LOW;
+int ventOutput = LOW;
+
+
+int lightButtonInput = LOW;
+int lightButtonState = LOW;
+int lightButtonPrevious = LOW;
+
+int lightOutput = LOW;
 
 int mode = 0; // 0 = hob2hood control, 1 = manual control
 
@@ -91,12 +96,12 @@ void loop() {
 
   // read manual control inputs
   
-  inVent = digitalRead(PIN_IN_VENT);
-  inLight = digitalRead(PIN_IN_LIGHT);
+  ventButtonInput = digitalRead(PIN_IN_VENT);
+  lightButtonInput = digitalRead(PIN_IN_LIGHT);
 
   // if any of the manual control inputs is IN USE --> manual mode
-  if (inLight == HIGH ||
-      inVent == HIGH ) {
+  if (lightButtonInput == HIGH ||
+      ventButtonInput == HIGH ) {
 
     if (mode == MODE_HOB2HOOD) {
       Serial.println("Switching to manual mode");
@@ -104,29 +109,71 @@ void loop() {
 
     mode = MODE_MANUAL;
 
-    Serial.println("inLight: " + inLight );
-    Serial.println(" inVent: " + inVent);
+
+    if (ventButtonInput == HIGH)
+    {Serial.println(ventButtonInput);}
+
+    if (lightButtonInput == HIGH)
+    {Serial.println(lightButtonInput);}
 
 
-    if ((millis() - lastDebounceTime) > debounceDelay) {
-      Serial.println("---About time!---");
-        
-        if (inLight != last_light) {
-          // Switch on the light:
-          lastDebounceTime = millis();
-          last_light = light;
-          //light = !light;
-        }
-    
-        if (inVent != last_vent) {
-        lastDebounceTime = millis();
-          last_vent = vent;
-          //vent = !vent;
-        }
-    
+
+  // If the switch changed, due to noise or pressing:
+  if ((ventButtonInput != ventButtonPrevious) || (lightButtonInput != lightButtonPrevious)) {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+  }
+  
+
+// VENT
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (ventButtonInput != ventButtonState) {
+      ventButtonState = ventButtonInput;
+
+      // only toggle the LED if the new button state is HIGH
+      if (ventButtonState == HIGH) {
+        ventOutput = !ventOutput;
+      }
     }
+  }
+  
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  ventButtonPrevious = ventButtonInput;
+
+ //
+
+
+// LIGHT
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (lightButtonInput != lightButtonState) {
+      lightButtonState = lightButtonInput;
+
+      // only toggle the LED if the new button state is HIGH
+      if (lightButtonState == HIGH) {
+        lightOutput = !lightOutput;
+      }
+    }
+  }
+  
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  lightButtonPrevious = lightButtonInput;
+
+
+
+ 
+ // 
 
     controlHood();
+
+
 
   } else {
 
@@ -137,8 +184,8 @@ void loop() {
     if (mode == MODE_MANUAL) {
       Serial.println("Switching to Hob2Hood mode");
       // Well, we can't just set to initial state
-       vent = 0;
-       light = 0;
+       ventButtonState = LOW;
+       lightButtonState = LOW;
        controlHood();
 
       // and switch to hob2hood mode
@@ -162,39 +209,39 @@ void receiveIRCommand() {
     switch (results.value) {
 
       case IRCMD_LIGHT_ON:
-        light = HIGH;
+        lightOutput = HIGH;
         break;
 
       case IRCMD_LIGHT_OFF:
-        light = LOW;
+        lightOutput = LOW;
         break;
 
       case IRCMD_VENT_1:
-        vent = HIGH;
+        ventOutput = HIGH;
         break;
 
       case IRCMD_VENT_2:
-        vent = HIGH;
+        ventOutput = HIGH;
         break;
 
       case IRCMD_VENT_3:
-        vent = HIGH;
+        ventOutput = HIGH;
         break;
 
       case IRCMD_VENT_4:
-        vent = HIGH;
+        ventOutput = HIGH;
         break;
 
       case IRCMD_VENT_OFF:
-        vent = LOW;
+        ventOutput = LOW;
         break;
 
       case IRCMD_TEST_ON:
-        light = HIGH;
+        lightOutput = HIGH;
         break;
 
       case IRCMD_TEST_OFF:
-        light = LOW;
+        lightOutput = LOW;
         break;
 
       default:
@@ -210,22 +257,26 @@ void receiveIRCommand() {
 // control hood based on 'light' and 'vent' variables
 void controlHood() {
 
-  bool logLight = light!=last_light;
-  bool logVent = vent!=last_vent;
+  //bool logLight = lightOutput!=lightButtonPrevious;
+  //bool logVent = ventOutput!=ventButtonPrevious;
   
 
   // control light
-  switch (light) {
+  switch (lightOutput) {
     // Light OFF
     case LOW:
-      if (logLight) Serial.println("Light: OFF");
+      //if (logLight) 
+      Serial.println("Light: OFF");
       digitalWrite(PIN_OUT_LIGHT, LOW);
+      digitalWrite(PIN_OUT_LED, LOW);
       delay(10);
       break;
     // Light ON
     case HIGH:
-      if (logLight) Serial.println("Light: ON");
+      //if (logLight) 
+      Serial.println("Light: ON");
       digitalWrite(PIN_OUT_LIGHT, HIGH);
+      digitalWrite(PIN_OUT_LED, HIGH);
       delay(10);
       break;
     default:
@@ -233,21 +284,23 @@ void controlHood() {
   }
 
   // control ventilation
-  switch (vent) {
+  switch (ventOutput) {
 
     // Ventilation OFF
     case LOW:
-      if (logVent) Serial.println("Ventilation: OFF");
+      //if (logVent) 
+      Serial.println("Ventilation: OFF");
       digitalWrite(PIN_OUT_VENT, LOW);
-      digitalWrite(PIN_OUT_LED, LOW);
+      
       delay(10);
       break;
 
     // Ventilation ON
     case HIGH:
-      if (logVent) Serial.println("Ventilation: ON");
+      //if (logVent) 
+      Serial.println("Ventilation: ON");
       digitalWrite(PIN_OUT_VENT, HIGH);
-      digitalWrite(PIN_OUT_LED, HIGH);
+      
       delay(10);
       break;
 
@@ -256,7 +309,7 @@ void controlHood() {
 
   }
   
-  last_light = light;
-  last_vent = vent;
+  //last_light = light;
+  //last_vent = vent;
   
 }
