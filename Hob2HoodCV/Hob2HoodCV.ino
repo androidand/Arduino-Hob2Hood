@@ -28,26 +28,13 @@ const long IRCMD_LIGHT_ON = 0xE208293C;
 const long IRCMD_LIGHT_OFF = 0x24ACF947;
 
 // Pins for input switches/controls for manual control of the hood
-//const int PIN_IN_VENT_1 = A0;
-//const int PIN_IN_VENT_2 = A1;
-//const int PIN_IN_VENT_3 = A2;
-//const int PIN_IN_VENT_4 = A3;
 const int PIN_IN_VENT = A0;
 const int PIN_IN_LIGHT = A4;
 
-// Pins for the output which controls relais which finally control the hood
-//const int PIN_OUT_VENT_1 = 2;
-//const int PIN_OUT_VENT_2 = 3;
-//const int PIN_OUT_VENT_3 = 4; // was: 4
-//const int PIN_OUT_VENT_4 = 5;
-
+// Pins for the output which controls a relay for the ventilation motor
 const int PIN_OUT_VENT = 2;
 
-const int PIN_OUT_LIGHT = 6; // was: 6
-
-//const int PIN_OUT_EXT1 = 7;
-//const int PIN_OUT_EXT2 = 8;
-//const int PIN_OUT_EXT3 = 9;
+const int PIN_OUT_LIGHT = 6;
 
 // IR Receiver PIN
 const int PIN_IR_RECEIVER = 11;
@@ -69,30 +56,13 @@ decode_results results;
 #define ON LOW
 
 void setup() {
-  // Setup relay-outputs
-  //pinMode(PIN_OUT_VENT_1, OUTPUT);
-  //pinMode(PIN_OUT_VENT_2, OUTPUT);
-  //pinMode(PIN_OUT_VENT_3, OUTPUT);
-  //pinMode(PIN_OUT_VENT_4, OUTPUT);
-  //digitalWrite(PIN_OUT_VENT_1, OFF);
-  //digitalWrite(PIN_OUT_VENT_2, OFF);
-  //digitalWrite(PIN_OUT_VENT_3, OFF);
-  //digitalWrite(PIN_OUT_VENT_4, OFF);
 
+  // Init
   pinMode(PIN_OUT_VENT, OUTPUT);
   digitalWrite(PIN_OUT_VENT, OFF);
 
   pinMode(PIN_OUT_LIGHT, OUTPUT);
-  //pinMode(PIN_OUT_EXT1, OUTPUT);
-  //pinMode(PIN_OUT_EXT2, OUTPUT);
-  //pinMode(PIN_OUT_EXT3, OUTPUT);
-
-  // define startup-state
-
   digitalWrite(PIN_OUT_LIGHT, OFF);
-  //digitalWrite(PIN_OUT_EXT1, OFF);
-  //digitalWrite(PIN_OUT_EXT2, OFF);
-  //digitalWrite(PIN_OUT_EXT3, OFF);
 
   Serial.begin(9600); // for serial monitor output
   Serial.println("Hob2Hood Starting ...");
@@ -106,11 +76,7 @@ void loop() {
 
   // read manual control inputs
   int inLight = analogRead(PIN_IN_LIGHT);
-  //int inVentilation1 = analogRead(PIN_IN_VENT_1);
-  //int inVentilation2 = analogRead(PIN_IN_VENT_2);
-  //int inVentilation3 = analogRead(PIN_IN_VENT_3);
-  //int inVentilation4 = analogRead(PIN_IN_VENT_4);
-int inVentilation = analogRead(PIN_IN_VENT);
+  int inVentilation = analogRead(PIN_IN_VENT);
 
   // if any of the manual control inputs is IN USE (analog value >512) --> manual mode
   if (inLight >= 512 ||
